@@ -5,6 +5,7 @@ import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaInterface;
 import org.apache.cordova.CordovaPlugin;
 import org.apache.cordova.LOG;
+import org.apache.cordova.PluginResult;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -27,12 +28,18 @@ import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.BitmapDescriptor;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 
-public class MapKit extends CordovaPlugin {
+import com.google.android.gms.maps.GoogleMap.OnMapClickListener;
+import com.google.android.gms.maps.GoogleMap.OnMapLongClickListener;
+
+
+
+public class MapKit extends CordovaPlugin implements OnMapClickListener, OnMapLongClickListener {
 
     protected ViewGroup root; // original Cordova layout
     protected RelativeLayout main; // new layout to support map
     protected MapView mapView;
     private CallbackContext cCtx;
+    private CallbackContext showCCtx;
     private String TAG = "MapKitPlugin";
 
     @Override
@@ -41,8 +48,41 @@ public class MapKit extends CordovaPlugin {
         main = new RelativeLayout(cordova.getActivity());
     }
 
+    @Override
+    public void onMapClick(LatLng point) {
+        try {
+            LOG.d(TAG, "map clicked");
+        JSONObject data = new JSONObject();
+        data.put("lat", point.latitude);
+        data.put("lon", point.longitude);
+        data.put("type","click");
+        PluginResult result = new PluginResult(PluginResult.Status.OK, data);
+        result.setKeepCallback(true);
+        showCCtx.sendPluginResult(result);
+        } catch(Exception e){
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    public void onMapLongClick(LatLng point) {
+        try {
+            LOG.d(TAG, "map clicked");
+            JSONObject data = new JSONObject();
+            data.put("lat", point.latitude);
+            data.put("lon", point.longitude);
+            data.put("type","click");
+            PluginResult result = new PluginResult(PluginResult.Status.OK, data);
+            result.setKeepCallback(true);
+            showCCtx.sendPluginResult(result);
+        } catch(Exception e){
+            e.printStackTrace();
+        }
+    }
+
     public void showMap(final JSONObject options) {
         try {
+            final MapKit self = this;
             cordova.getActivity().runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
@@ -62,6 +102,7 @@ public class MapKit extends CordovaPlugin {
                     if (resultCode == ConnectionResult.SUCCESS) {
                         mapView = new MapView(cordova.getActivity(),
                                 new GoogleMapOptions());
+
                         root = (ViewGroup) webView.getParent();
                         root.removeView(webView);
                         main.addView(webView);
@@ -70,7 +111,7 @@ public class MapKit extends CordovaPlugin {
 
                         try {
                             MapsInitializer.initialize(cordova.getActivity());
-                        } catch (GooglePlayServicesNotAvailableException e) {
+                        } catch (Exception e) {
                             e.printStackTrace();
                         }
 
@@ -96,7 +137,17 @@ public class MapKit extends CordovaPlugin {
                         mapView.getMap().moveCamera(
                                 CameraUpdateFactory.newLatLngZoom(new LatLng(
                                         latitude, longitude), 15));
-                        cCtx.success();
+
+                        try{
+                            mapView.getMap().setOnMapClickListener(self);
+                            mapView.getMap().setOnMapLongClickListener(self);
+                        } catch(NullPointerException e) {
+                            e.printStackTrace();
+                        }
+
+                        PluginResult result = new PluginResult(PluginResult.Status.OK);
+                        result.setKeepCallback(true);
+                        showCCtx.sendPluginResult(result);
 
                     } else if (resultCode == ConnectionResult.SERVICE_MISSING ||
                                resultCode == ConnectionResult.SERVICE_VERSION_UPDATE_REQUIRED ||
@@ -105,7 +156,7 @@ public class MapKit extends CordovaPlugin {
                                     new DialogInterface.OnCancelListener() {
                                         @Override
                                         public void onCancel(DialogInterface dialog) {
-                                            cCtx.error("com.google.android.gms.common.ConnectionResult " + resultCode);
+                                            showCCtx.error("com.google.android.gms.common.ConnectionResult " + resultCode);
                                         }
                                     }
                                 );
@@ -268,6 +319,7 @@ public class MapKit extends CordovaPlugin {
             CallbackContext callbackContext) throws JSONException {
         cCtx = callbackContext;
         if (action.compareTo("showMap") == 0) {
+            showCCtx = cCtx;
             showMap(args.getJSONObject(0));
         } else if (action.compareTo("hideMap") == 0) {
             hideMap();
